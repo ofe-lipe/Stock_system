@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Control - Deep South</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>📊 Stock Control</h1>
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="register">Record Stock</button>
+                <button class="tab-btn" data-tab="history">History</button>
+            </div>
+        </header>
+
+        <section id="register" class="tab-content active">
+            <div class="form-container">
+                <form id="outputForm">
+
+                    <!-- Type -->
+                    <div class="form-group">
+                        <label>Type:</label>
+                        <div class="button-group">
+                            <button type="button" class="type-btn selected" data-type="in">Stock In</button>
+                            <button type="button" class="type-btn" data-type="out">Stock Out</button>
+                        </div>
+                        <input type="hidden" id="type" value="in">
+                    </div>
+
+                    <!-- Product -->
+                    <div class="form-group">
+                        <label>Product:</label>
+                        <div class="button-group" id="productButtons"></div>
+                        <input type="hidden" id="product" required>
+                    </div>
+
+                    <!-- Quantity -->
+                    <div class="form-group">
+                        <label>Quantity:</label>
+                        <div class="quantity-control">
+                            <button type="button" class="qty-btn" id="decreaseBtn">−</button>
+                            <input type="number" id="quantity" value="1" readonly>
+                            <button type="button" class="qty-btn" id="increaseBtn">+</button>
+                        </div>
+                    </div>
+
+                    <!-- Destination -->
+                    <div class="form-group">
+                        <label>Destination:</label>
+                        <div class="button-group">
+                            <button type="button" class="destination-btn" data-destination="Main Bar">Main Bar</button>
+                            <button type="button" class="destination-btn" data-destination="Craft Bar">Craft Bar</button>
+                            <button type="button" class="destination-btn" data-destination="Back Bar">Back Bar</button>
+                        </div>
+                        <input type="hidden" id="destination" required>
+                    </div>
+
+                    <!-- Staff -->
+                    <div class="form-group">
+                        <label>Staff Member:</label>
+                        <select id="employee" required>
+                            <option value="">-- Select --</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="submit-btn">Submit</button>
+                </form>
+
+                <div id="successMessage" class="success-message" style="display:none;">
+                    ✓ Completed successfully
+                </div>
+
+                <div id="errorMessage" class="error-message" style="display:none;">
+                    ✗ Please fill all fields
+                </div>
+            </div>
+        </section>
+
+        <section id="history" class="tab-content">
+            <div class="history-container">
+                <div id="stockSummary"></div>
+
+                <div class="history-controls">
+                    <button id="clearHistoryBtn" class="clear-btn">Clear History</button>
+                    <button id="exportBtn" class="clear-btn">Export CSV</button>
+                </div>
+
+                <div id="historyList"></div>
+            </div>
+        </section>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
