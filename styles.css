@@ -78,7 +78,7 @@ body {
     padding: 40px 30px;
 }
 
-.form-group {
+.form-group { 
     margin-bottom: 30px;
 }
 
@@ -87,6 +87,27 @@ body {
     font-size: 1.2em;
     font-weight: 600;
     margin-bottom: 10px;
+}
+
+/* ===== STOCK COUNT ===== */
+#stockInputs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 15px;
+}
+
+.stock-input {
+    width: 100%;
+    padding: 12px;
+    font-size: 1.1em;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    text-align: center;
+}
+
+.stock-input:focus {
+    border-color: #667eea;
+    outline: none;
 }
 
 /* ===== BUTTON GROUP ===== */
@@ -160,12 +181,18 @@ body {
 }
 
 #quantity {
-    width: 100px;
+    width: 150px;
     text-align: center;
-    font-size: 1.3em;
-    padding: 10px;
+    font-size: 1.6em;
+    padding: 12px;
     border: 2px solid #667eea;
-    border-radius: 6px;
+    border-radius: 8px;
+    outline: none;
+}
+
+#quantity:focus {
+    border-color: #5568d3;
+    box-shadow: 0 0 6px rgba(102,126,234,0.4);
 }
 
 /* ===== SELECT ===== */
@@ -225,6 +252,43 @@ select {
     border-radius: 6px;
 }
 
+
+/* ===== HISTORY COLORS ===== */
+
+/* Entrada (verde) */
+.history-item.in {
+    border-left: 5px solid #28a745;
+    background: #eaf7ee;
+}
+
+/* Saída (vermelho) */
+.history-item.out {
+    border-left: 5px solid #dc3545;
+    background: #fdeaea;
+}
+
+/* Label IN / OUT */
+.type-label {
+    font-weight: bold;
+    margin-left: 8px;
+}
+
+/* Texto verde */
+.history-item.in .type-label {
+    color: #28a745;
+}
+
+/* Texto vermelho */
+.history-item.out .type-label {
+    color: #dc3545;
+}
+
+/* ===== STOCK SUMMARY ===== */
+#stockSummary div {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+}
+
 /* ===== BUTTONS ===== */
 .clear-btn {
     padding: 10px 20px;
@@ -238,4 +302,35 @@ select {
 
 .clear-btn:hover {
     background: #c82333;
+}
+
+.stock-total-card {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.stock-total-card strong {
+    font-size: 2em;
+    display: block;
+}
+
+.stock-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 15px;
+}
+
+.stock-card {
+    background: #f9f9f9;
+    padding: 15px;
+    border-radius: 10px;
+    border-left: 5px solid #667eea;
+}
+
+.stock-card strong {
+    font-size: 1.5em;
 }

@@ -7,7 +7,7 @@ const STORAGE_KEY = 'pubStock_records';
 document.addEventListener('DOMContentLoaded', () => {
     initialiseProductButtons();
     initialiseStaffSelect();
-    initialiseQuantityControl();
+    createStockInputs();
     initialiseDestinationButtons();
     initialiseTypeButtons();
     initialiseFormSubmission();
@@ -15,7 +15,36 @@ document.addEventListener('DOMContentLoaded', () => {
     initialiseExport();
     initialiseClear();
     loadHistory();
+    document.getElementById('saveStockBtn').onclick = salvarContagemEstoque;
 });
+
+function salvarContagemEstoque() {
+    const inputs = document.querySelectorAll('.stock-input');
+    const estoque = {};
+
+    inputs.forEach(input => {
+        const produto = input.dataset.product;
+        const valor = parseInt(input.value) || 0;
+
+        estoque[produto] = valor;
+    });
+
+    localStorage.setItem('realStock', JSON.stringify(estoque));
+
+    const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+
+    data.push({
+        type: 'stock-update',
+        timestamp: new Date().toLocaleString('pt-BR')
+    });
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
+    renderStock();
+    loadHistory();
+
+    show('stockSuccessMessage');
+}
 
 // PRODUCT
 function initialiseProductButtons() {
@@ -43,11 +72,18 @@ function initialiseStaffSelect() {
     });
 }
 
-// QUANTITY
-function initialiseQuantityControl() {
-    const q = document.getElementById('quantity');
-    document.getElementById('increaseBtn').onclick=()=>q.value++;
-    document.getElementById('decreaseBtn').onclick=()=>{ if(q.value>1) q.value--; };
+function createStockInputs() {
+    const container = document.getElementById('stockInputs');
+    container.innerHTML = '';
+
+    PRODUCTS.forEach(product => {
+        container.innerHTML += `
+            <div class="form-group">
+                <label>${product}</label>
+                <input type="number" min="0" data-product="${product}" class="stock-input">
+            </div>
+        `;
+    });
 }
 
 // DESTINATION
@@ -86,7 +122,7 @@ function initialiseFormSubmission() {
             timestamp: new Date().toLocaleString('en-GB').replace(',', '')
         };
 
-        if (!record.product || !record.destination || !record.staff || !record.type || !record.quantity) {
+        if (!record.product || !record.destination || !record.staff || !record.type || record.quantity <= 0) {
         show('errorMessage');
         return;
                     }
@@ -126,61 +162,162 @@ function resetForm(){
 }
 
 // HISTORY
-function loadHistory(){
+function loadHistory() {
     renderStock();
+
     const list = document.getElementById('historyList');
     const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-    list.innerHTML='';
 
-    if(!data.length){
-        list.innerHTML='No records found';
+    list.innerHTML = '';
+
+    if (!data.length) {
+        list.innerHTML = 'No records found';
         return;
     }
 
-    data.slice().reverse().forEach(r=>{
-        list.innerHTML+=`
-        <div class="history-item">
-            <strong>${r.product}</strong> (${r.quantity}) - ${r.type.toUpperCase()}
-            <br>${r.destination} | ${r.staff}
-            <br>${r.timestamp}
-        </div>`;
+    data.slice().reverse().forEach(r => {
+
+        // 🟢 STOCK COUNT (mensagem simples)
+        if (r.type === 'stock-update') {
+            list.innerHTML += `
+                <div class="history-item in">
+                    <strong>Estoque atualizado</strong>
+                    <br>${r.timestamp}
+                </div>
+            `;
+            return;
+        }
+
+        // ❌ ignora dados quebrados
+        if (!r.product || !r.type) return;
+
+        // 🔴🟢 IN / OUT normal
+        list.innerHTML += `
+            <div class="history-item ${r.type === 'in' ? 'in' : 'out'}">
+                <strong>${r.product}</strong> (${r.quantity})
+                <span class="type-label">
+                    ${r.type === 'in' ? 'IN' : 'OUT'}
+                </span>
+                <br>${r.destination} | ${r.staff}
+                <br>${r.timestamp}
+            </div>
+        `;
     });
 }
 
 // STOCK
-function renderStock(){
-    const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-    const stock = {};
-    data.forEach(r=>{
-        if(!stock[r.product]) stock[r.product]=0;
-        stock[r.product]+= r.type==='in'? r.quantity : -r.quantity;
-    });
-
-    const div = document.getElementById('stockSummary');
-    div.innerHTML='<h3>Current Stock</h3>';
-    Object.keys(stock).forEach(p=>{
-        div.innerHTML+=`${p}: <strong>${stock[p]}</strong><br>`;
-    });
-}
-
-// EXPORT
-function initialiseExport(){
-    document.getElementById('exportBtn').onclick=()=>{
+    function renderStock(){
         const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        const realStock = JSON.parse(localStorage.getItem('realStock')) || {};
+        const current = {};
 
-        let csv = 'Type,Product,Quantity,Destination,Staff,Date\n';
-
-        data.forEach(r => {
-            csv += `"${r.type}","${r.product}","${r.quantity}","${r.destination}","${r.staff}","${r.timestamp}"\n`;
+        // começa com estoque real
+        Object.keys(realStock).forEach(p => {
+            current[p] = realStock[p];  
         });
 
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        // aplica movimentações
+    data.forEach(r => {
+        if (!r.product) return; // ignora erro
+
+        if (!current[r.product]) current[r.product] = 0;
+
+        if (r.type === 'in') current[r.product] += r.quantity;
+        if (r.type === 'out') current[r.product] -= r.quantity;
+    });
+
+        const div = document.getElementById('stockSummary');
+        let total = 0;
+
+        Object.keys(current).forEach(p => {
+            total += current[p];
+        });
+
+        div.innerHTML = `
+            <div class="stock-total-card">
+                📦 Total em estoque
+                <strong>${total}</strong>
+                produtos
+            </div>
+
+            <div class="stock-grid">
+                ${Object.keys(current).map(p => {
+                    const initial = realStock[p] ?? 0;
+                    const now = current[p];
+
+                    return `
+                        <div class="stock-card">
+                            <div>${p}</div>
+                            <strong>${now}</strong>
+                            <small>Início: ${initial}</small>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+`;
+
+// 🔥 MOSTRA TOTAL NO TOPO
+div.innerHTML += `
+    <div style="margin-top:15px; font-size:1.2em;">
+        <strong>Total em estoque: ${total}</strong>
+    </div>
+`;
+}
+// EXPORT
+function initialiseExport(){
+    document.getElementById('exportBtn').onclick = () => {
+        const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+
+        let table = `
+            <table border="1">
+                <tr>
+                    <th>Type</th>
+                    <th>Product</th>
+                    <th>Quantity</th>
+                    <th>Destination</th>
+                    <th>Staff</th>
+                    <th>Date</th>
+                </tr>
+        `;
+
+        data.forEach(r => {
+            if (r.type === 'stock-update') {
+                table += `
+                    <tr>
+                        <td>Stock Update</td>
+                        <td colspan="4">Estoque atualizado</td>
+                        <td>${r.timestamp}</td>
+                    </tr>
+                `;
+                return;
+            }
+
+            table += `
+                <tr>
+                    <td>${r.type}</td>
+                    <td>${r.product}</td>
+                    <td>${r.quantity}</td>
+                    <td>${r.destination}</td>
+                    <td>${r.staff}</td>
+                    <td>${r.timestamp}</td>
+                </tr>
+            `;
+        });
+
+        table += `</table>`;
+
+        const blob = new Blob([table], {
+            type: 'application/vnd.ms-excel'
+        });
+
         const url = URL.createObjectURL(blob);
 
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'stock.csv';
+        a.download = 'stock-history.xls';
         a.click();
+
+        URL.revokeObjectURL(url);
     };
 }
 
