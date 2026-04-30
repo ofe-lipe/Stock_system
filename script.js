@@ -86,9 +86,10 @@ function initialiseFormSubmission() {
             timestamp: new Date().toLocaleString('en-GB').replace(',', '')
         };
 
-        if (!record.product || !record.destination || !record.staff) {
-            show('errorMessage'); return;
-        }
+        if (!record.product || !record.destination || !record.staff || !record.type || !record.quantity) {
+        show('errorMessage');
+        return;
+                    }
 
         const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
         data.push(record);
@@ -101,9 +102,27 @@ function initialiseFormSubmission() {
 }
 
 function resetForm(){
+    // Reset form
     document.getElementById('outputForm').reset();
-    document.getElementById('quantity').value=1;
-    document.querySelectorAll('.selected').forEach(b=>b.classList.remove('selected'));
+
+    // Reset quantity
+    document.getElementById('quantity').value = 1;
+
+    // 🔴 IMPORTANT: clear hidden values
+    document.getElementById('product').value = '';
+    document.getElementById('destination').value = '';
+    document.getElementById('type').value = 'in';
+
+    // Remove ALL selected styles
+    document.querySelectorAll('.selected').forEach(el => {
+        el.classList.remove('selected');
+    });
+
+    // Optional: set default type again visually
+    const defaultType = document.querySelector('.type-btn[data-type="in"]');
+    if (defaultType) {
+        defaultType.classList.add('selected');
+    }
 }
 
 // HISTORY
