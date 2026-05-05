@@ -1,10 +1,13 @@
+import { db } from './firebase.js';
+import { collection, addDoc, getDocs, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
 const PRODUCTS = ['Beer','Coca-Cola','Vodka','Water','Wine','Tequila','Energy Drink','Tea','Coffee','Gin'];
 
 const STAFF_MEMBERS = ['João Silva','Maria Santos','Pedro Oliveira','Ana Costa','Carlos Ferreira'];
 
 const STORAGE_KEY = 'pubStock_records';
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     initialiseProductButtons();
     initialiseStaffSelect();
     createStockInputs();
@@ -14,36 +17,112 @@ document.addEventListener('DOMContentLoaded', () => {
     initialiseTabs();
     initialiseExport();
     initialiseClear();
-    loadHistory();
+
     document.getElementById('saveStockBtn').onclick = salvarContagemEstoque;
+
+    await loadHistory();
 });
 
-function salvarContagemEstoque() {
-    const inputs = document.querySelectorAll('.stock-input');
-    const estoque = {};
+async function salvarMovimentacaoFirebase(dado) {
+    try {
+        await addDoc(collection(db, "movements"), dado);
+        console.log("Salvo no Firebase!");
+    } catch (e) {
+        console.error("Erro ao salvar no Firebase:", e);
+    }
+}
 
-    inputs.forEach(input => {
-        const produto = input.dataset.product;
-        const valor = parseInt(input.value) || 0;
+async function buscarMovimentacoesFirebase() {
+    const querySnapshot = await getDocs(collection(db, "movements"));
+    const lista = [];
 
-        estoque[produto] = valor;
+    querySnapshot.forEach((doc) => {
+        lista.push(doc.data());
     });
 
-    localStorage.setItem('realStock', JSON.stringify(estoque));
+    return lista;
+}
 
-    const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+async function salvarEstoqueFirebase(estoque) {
+try {
+await setDoc(doc(db, "stock", "current"), {
+items: estoque,
+updatedAt: Date.now()
+});
 
-    data.push({
-        type: 'stock-update',
-        timestamp: new Date().toLocaleString('pt-BR')
+    console.log("Estoque salvo no Firebase!");
+} catch (e) {
+    console.error("Erro ao salvar estoque no Firebase:", e);
+}
+
+}
+
+async function buscarEstoqueFirebase() {
+try {
+const docSnap = await getDoc(doc(db, "stock", "current"));
+
+    if (docSnap.exists()) {
+        return docSnap.data().items || {};
+    }
+
+    return {};
+} catch (e) {
+    console.error("Erro ao buscar estoque no Firebase:", e);
+    return JSON.parse(localStorage.getItem('realStock')) || {};
+}
+
+}
+
+async function salvarContagemEstoque() {
+const inputs = document.querySelectorAll('.stock-input');
+const estoque = {};
+
+inputs.forEach(input => {
+    const produto = input.dataset.product;
+    const valor = parseInt(input.value) || 0;
+
+    estoque[produto] = valor;
+});
+
+await salvarEstoqueFirebase(estoque);
+
+localStorage.setItem('realStock', JSON.stringify(estoque));
+
+const stockUpdate = {
+    type: 'stock-update',
+    timestamp: new Date().toLocaleString('pt-BR'),
+    createdAt: Date.now()
+};
+
+await salvarMovimentacaoFirebase(stockUpdate);
+
+const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+data.push(stockUpdate);
+localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
+await loadHistory();
+
+show('stockSuccessMessage');
+
+}
+
+async function limparHistoricoFirebase() {
+try {
+const querySnapshot = await getDocs(collection(db, "movements"));
+
+    const promessas = [];
+
+    querySnapshot.forEach(documento => {
+        promessas.push(deleteDoc(documento.ref));
     });
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    await Promise.all(promessas);
 
-    renderStock();
-    loadHistory();
+    console.log("Histórico limpo no Firebase!");
+} catch (e) {
+    console.error("Erro ao limpar histórico no Firebase:", e);
+}
 
-    show('stockSuccessMessage');
 }
 
 // PRODUCT
@@ -110,7 +189,7 @@ function initialiseTypeButtons() {
 
 // FORM
 function initialiseFormSubmission() {
-    document.getElementById('outputForm').onsubmit = e => {
+   document.getElementById('outputForm').onsubmit = async e => {
         e.preventDefault();
 
         const record = {
@@ -119,7 +198,8 @@ function initialiseFormSubmission() {
             quantity: +document.getElementById('quantity').value,
             destination: document.getElementById('destination').value,
             staff: document.getElementById('employee').value,
-            timestamp: new Date().toLocaleString('en-GB').replace(',', '')
+            timestamp: new Date().toLocaleString('en-GB').replace(',', ''),
+            createdAt: Date.now()
         };
 
         if (!record.product || !record.destination || !record.staff || !record.type || record.quantity <= 0) {
@@ -127,13 +207,15 @@ function initialiseFormSubmission() {
         return;
                     }
 
+        await salvarMovimentacaoFirebase(record);
+
         const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
         data.push(record);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 
         show('successMessage');
         resetForm();
-        loadHistory();
+        await loadHistory();
     };
 }
 
@@ -162,11 +244,19 @@ function resetForm(){
 }
 
 // HISTORY
-function loadHistory() {
-    renderStock();
+
+async function loadHistory() {
+   await renderStock();
 
     const list = document.getElementById('historyList');
-    const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    let data = [];
+
+    try {
+        data = await buscarMovimentacoesFirebase();
+    } catch (error) {
+        console.error("Erro ao buscar histórico no Firebase:", error);
+        data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    }
 
     list.innerHTML = '';
 
@@ -175,9 +265,12 @@ function loadHistory() {
         return;
     }
 
-    data.slice().reverse().forEach(r => {
+    data.sort((a, b) => {
+        return (b.createdAt || 0) - (a.createdAt || 0);
+    });
 
-        // 🟢 STOCK COUNT (mensagem simples)
+    data.forEach(r => {
+
         if (r.type === 'stock-update') {
             list.innerHTML += `
                 <div class="history-item in">
@@ -188,10 +281,8 @@ function loadHistory() {
             return;
         }
 
-        // ❌ ignora dados quebrados
         if (!r.product || !r.type) return;
 
-        // 🔴🟢 IN / OUT normal
         list.innerHTML += `
             <div class="history-item ${r.type === 'in' ? 'in' : 'out'}">
                 <strong>${r.product}</strong> (${r.quantity})
@@ -206,54 +297,62 @@ function loadHistory() {
 }
 
 // STOCK
-    function renderStock(){
-        const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-        const realStock = JSON.parse(localStorage.getItem('realStock')) || {};
-        const current = {};
+   async function renderStock() {
+let data = [];
+let realStock = {};
 
-        // começa com estoque real
-        Object.keys(realStock).forEach(p => {
-            current[p] = realStock[p];  
-        });
+try {
+    data = await buscarMovimentacoesFirebase();
+    realStock = await buscarEstoqueFirebase();
+} catch (error) {
+    console.error("Erro ao carregar estoque:", error);
+    data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    realStock = JSON.parse(localStorage.getItem('realStock')) || {};
+}
 
-        // aplica movimentações
-    data.forEach(r => {
-        if (!r.product) return; // ignora erro
+const current = {};
 
-        if (!current[r.product]) current[r.product] = 0;
+Object.keys(realStock).forEach(p => {
+    current[p] = realStock[p];
+});
 
-        if (r.type === 'in') current[r.product] += r.quantity;
-        if (r.type === 'out') current[r.product] -= r.quantity;
-    });
+data.forEach(r => {
+    if (!r.product) return;
 
-        const div = document.getElementById('stockSummary');
-        let total = 0;
+    if (!current[r.product]) current[r.product] = 0;
 
-        Object.keys(current).forEach(p => {
-            total += current[p];
-        });
+    if (r.type === 'in') current[r.product] += r.quantity;
+    if (r.type === 'out') current[r.product] -= r.quantity;
+});
 
-        div.innerHTML = `
-            <div class="stock-total-card">
-                📦 Total em estoque
-                <strong>${total}</strong>
-                produtos
-            </div>
+const div = document.getElementById('stockSummary');
+let total = 0;
 
-            <div class="stock-grid">
-                ${Object.keys(current).map(p => {
-                    const initial = realStock[p] ?? 0;
-                    const now = current[p];
+Object.keys(current).forEach(p => {
+    total += current[p];
+});
 
-                    return `
-                        <div class="stock-card">
-                            <div>${p}</div>
-                            <strong>${now}</strong>
-                            <small>Início: ${initial}</small>
-                        </div>
-                    `;
-                }).join('')}
-            </div>
+div.innerHTML = `
+    <div class="stock-total-card">
+        📦 Total em estoque
+        <strong>${total}</strong>
+        produtos
+    </div>
+
+    <div class="stock-grid">
+        ${Object.keys(current).map(p => {
+            const initial = realStock[p] ?? 0;
+            const now = current[p];
+
+            return `
+                <div class="stock-card">
+                    <div>${p}</div>
+                    <strong>${now}</strong>
+                    <small>Início: ${initial}</small>
+                </div>
+            `;
+        }).join('')}
+    </div>
 `;
 
 // 🔥 MOSTRA TOTAL NO TOPO
@@ -264,71 +363,60 @@ div.innerHTML += `
 `;
 }
 // EXPORT
-function initialiseExport(){
-    document.getElementById('exportBtn').onclick = () => {
-        const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+function initialiseExport() {
+document.getElementById('exportBtn').onclick = async () => {
+let data = [];
 
-        let table = `
-            <table border="1">
-                <tr>
-                    <th>Type</th>
-                    <th>Product</th>
-                    <th>Quantity</th>
-                    <th>Destination</th>
-                    <th>Staff</th>
-                    <th>Date</th>
-                </tr>
-        `;
+    try {
+        data = await buscarMovimentacoesFirebase();
+    } catch (error) {
+        console.error("Erro ao buscar dados para exportar:", error);
+        data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    }
 
-        data.forEach(r => {
-            if (r.type === 'stock-update') {
-                table += `
-                    <tr>
-                        <td>Stock Update</td>
-                        <td colspan="4">Estoque atualizado</td>
-                        <td>${r.timestamp}</td>
-                    </tr>
-                `;
-                return;
-            }
+    data.sort((a, b) => {
+        return (a.createdAt || 0) - (b.createdAt || 0);
+    });
 
-            table += `
-                <tr>
-                    <td>${r.type}</td>
-                    <td>${r.product}</td>
-                    <td>${r.quantity}</td>
-                    <td>${r.destination}</td>
-                    <td>${r.staff}</td>
-                    <td>${r.timestamp}</td>
-                </tr>
-            `;
-        });
+    let csv = '\uFEFFType;Product;Quantity;Destination;Staff;Date\n';
 
-        table += `</table>`;
+    data.forEach(r => {
+        if (r.type === 'stock-update') {
+            csv += `"Stock Update";"Estoque atualizado";"";"";"";"${r.timestamp || ''}"\n`;
+            return;
+        }
 
-        const blob = new Blob([table], {
-            type: 'application/vnd.ms-excel'
-        });
+        csv += `"${r.type || ''}";"${r.product || ''}";"${r.quantity || ''}";"${r.destination || ''}";"${r.staff || ''}";"${r.timestamp || ''}"\n`;
+    });
 
-        const url = URL.createObjectURL(blob);
+    const blob = new Blob([csv], {
+        type: 'text/csv;charset=utf-8;'
+    });
 
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'stock-history.xls';
-        a.click();
+    const url = URL.createObjectURL(blob);
 
-        URL.revokeObjectURL(url);
-    };
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'stock-history.csv';
+    a.click();
+
+    URL.revokeObjectURL(url);
+};
+
 }
 
 // CLEAR
-function initialiseClear(){
-    document.getElementById('clearHistoryBtn').onclick=()=>{
-        if(confirm('Clear all history?')){
-            localStorage.removeItem(STORAGE_KEY);
-            loadHistory();
-        }
-    };
+function initialiseClear() {
+document.getElementById('clearHistoryBtn').onclick = async () => {
+if (confirm('Clear all history?')) {
+await limparHistoricoFirebase();
+
+        localStorage.removeItem(STORAGE_KEY);
+
+        await loadHistory();
+    }
+};
+
 }
 
 // TABS
@@ -349,3 +437,4 @@ function show(id){
     el.style.display='block';
     setTimeout(()=>el.style.display='none',2000);
 }
+
