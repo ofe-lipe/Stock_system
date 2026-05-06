@@ -221,6 +221,66 @@ function initialiseTypeButtons() {
 
 /* ===== FORM SUBMISSION ===== */
 
+async function getCurrentStockByProduct(product) {
+    let data = [];
+    let realStock = {};
+
+    try {
+        data = await buscarMovimentacoesFirebase();
+        realStock = await buscarEstoqueFirebase();
+    } catch (error) {
+        console.error("Error checking current stock:", error);
+        data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        realStock = JSON.parse(localStorage.getItem('realStock')) || {};
+    }
+
+    let currentQuantity = realStock[product] || 0;
+
+    data.forEach(record => {
+        if (record.product !== product) return;
+
+        if (record.type === 'in') {
+            currentQuantity += record.quantity;
+        }
+
+        if (record.type === 'out') {
+            currentQuantity -= record.quantity;
+        }
+    });
+
+    return currentQuantity;
+}
+
+async function getPendingReturnByProductAndDestination(product, destination) {
+    let data = [];
+
+    try {
+        data = await buscarMovimentacoesFirebase();
+    } catch (error) {
+        console.error("Error checking pending return:", error);
+        data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    }
+
+    let totalOut = 0;
+    let totalIn = 0;
+
+    data.forEach(record => {
+        if (record.product !== product) return;
+        if (record.destination !== destination) return;
+
+        if (record.type === 'out') {
+            totalOut += record.quantity;
+        }
+
+        if (record.type === 'in') {
+            totalIn += record.quantity;
+        }
+    });
+
+    return totalOut - totalIn;
+}
+
+
 function initialiseFormSubmission() {
     document.getElementById('outputForm').onsubmit = async e => {
         e.preventDefault();
@@ -240,6 +300,27 @@ function initialiseFormSubmission() {
             return;
         }
 
+        if (record.type === 'out') {
+            const availableStock = await getCurrentStockByProduct(record.product);
+
+            if (record.quantity > availableStock) {
+                alert(`Not enough stock available. Current stock for ${record.product}: ${availableStock}`);
+                return;
+            }
+        }
+
+        if (record.type === 'in') {
+            const pendingReturn = await getPendingReturnByProductAndDestination(
+                record.product,
+                record.destination
+            );
+
+            if (record.quantity > pendingReturn) {
+                alert(`Invalid stock return. Only ${pendingReturn} ${record.product} can be returned from ${record.destination}.`);
+                return;
+            }
+        }
+
         await salvarMovimentacaoFirebase(record);
 
         const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
@@ -251,6 +332,18 @@ function initialiseFormSubmission() {
         await loadHistory();
     };
 }
+
+        await salvarMovimentacaoFirebase(record);
+
+        const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        data.push(record);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
+        show('successMessage');
+        resetForm();
+        await loadHistory();
+    ;
+
 
 /* ===== RESET FORM ===== */
 
@@ -316,7 +409,7 @@ async function loadHistory() {
             <div class="history-item ${r.type === 'in' ? 'in' : 'out'}">
                 <strong>${r.product}</strong> (${r.quantity})
                 <span class="type-label">
-                    ${r.type === 'in' ? 'IN' : 'OUT'}
+                    ${r.type === 'in' ? 'RETURN TO STOCK' : 'STOCK OUT'}
                 </span>
                 <br>${r.destination} | ${r.staff}
                 <br>${r.timestamp}
@@ -411,7 +504,7 @@ function initialiseExport() {
                 return;
             }
 
-            csv += `"${r.type || ''}";"${r.product || ''}";"${r.quantity || ''}";"${r.destination || ''}";"${r.staff || ''}";"${r.timestamp || ''}"\n`;
+            csv += `"${r.type === 'in' ? 'Return to Stock' : 'Stock Out'}";"${r.product || ''}";"${r.quantity || ''}";"${r.destination || ''}";"${r.staff || ''}";"${r.timestamp || ''}"\n`;
         });
 
         const blob = new Blob([csv], {
