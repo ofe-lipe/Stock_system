@@ -559,5 +559,5 @@ function show(id) {
 
     setTimeout(() => {
         el.style.display = 'none';
-    }, 2000);
+    }, 5000);
 }
